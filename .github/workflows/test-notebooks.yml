@@ -1,0 +1,51 @@
+name: Test Notebooks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - '00_Prerequisites'
+          - '01_Linear_Algebra'
+          - '02_Calculus'
+          - '03_Probability_and_Statistics'
+          - '04_Optimization'
+          - '05_Information_Theory'
+          - '06_Numerical_Methods'
+          - '07_Discrete_Mathematics'
+          - '08_Advanced_Linear_Algebra'
+          - '09_Advanced_Probability'
+          - '10_Differential_Geometry_and_Topology'
+          - '11_Functional_Analysis'
+          - '12_Capstone_Projects'
+
+    name: Test ${{ matrix.module }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nbval pytest
+
+      - name: Run notebooks (lax validation)
+        run: |
+          pytest --nbval-lax ${{ matrix.module }}/ \
+            --timeout=300 \
+            --ignore=${{ matrix.module }}/.ipynb_checkpoints \
+            -v
