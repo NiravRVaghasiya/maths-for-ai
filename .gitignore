@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Notebook execution artifacts
+.ipynb_checkpoints/
+
+# Reproducibility audit output (tools/notebook_audit) -- generated reports,
+# not source; see docs/NOTEBOOK_AUDIT.md
+reports/
+
+# Scratch/manual-audit working directory (not part of the curriculum)
+.audit_tmp/
+
+# Linter / type-checker caches
+.ruff_cache/
+.mypy_cache/
+
+# OS / editor metadata
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Logs, backups, and temp files
+*.log
+*.bak
+*.tmp
+*.orig
+
+# Secrets and local credentials (never commit these)
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+secrets.*
+
+# Python build / distribution artifacts
+build/
+dist/
+*.egg-info/

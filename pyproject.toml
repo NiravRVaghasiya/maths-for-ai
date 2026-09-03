@@ -1,0 +1,43 @@
+# Shared configuration for the repo's dev tooling (ruff, black). Keeping this
+# in one place means a contributor running `ruff check` / `black` locally sees
+# exactly what CI (ci.yml, code-quality job) enforces -- no drift between the
+# two. This is NOT a packaging manifest; the curriculum is a collection of
+# notebooks, not an installable library.
+
+[tool.black]
+line-length = 100
+# Match the interpreters CI runs against (see nightly.yml).
+target-version = ["py311", "py312", "py313"]
+# Intentionally malformed / minimal test fixtures must not be reformatted
+# (force-exclude also applies when black is given explicit paths, unlike the
+# plain `exclude`).
+force-exclude = "tools/notebook_audit/tests/fixtures/"
+extend-exclude = "tools/notebook_audit/tests/fixtures/"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [
+    # Intentionally malformed / minimal notebooks used to test the audit
+    # classifier. They contain deliberate NameErrors, unused imports, and
+    # missing-module imports and must never be "fixed" or linted.
+    "tools/notebook_audit/tests/fixtures",
+]
+
+[tool.ruff.lint]
+# A pragmatic, non-controversial baseline: pyflakes (F, real bugs like
+# undefined names and unused imports), pycodestyle (E/W), and import sorting
+# (I). Deliberately conservative for a first CI rollout -- richer rule sets
+# (e.g. flake8-bugbear "B") can be adopted later as an intentional cleanup PR
+# rather than turning existing harness code red on day one. Notebooks relax
+# E402 (imports after a narrative markdown cell) and F401 (a cell may import
+# something used only in a later cell) via nbqa flags in CI.
+select = ["E", "W", "F", "I"]
+ignore = [
+    "E203",  # whitespace before ':' -- conflicts with black
+    "E501",  # line too long -- black handles wrapping; don't double-report
+]
+
+[tool.ruff.lint.per-file-ignores]
+# The audit harness's own test files use fixtures and patterns pytest needs.
+"tools/notebook_audit/tests/*" = ["F401", "F811"]

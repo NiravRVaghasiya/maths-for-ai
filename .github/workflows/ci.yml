@@ -1,0 +1,230 @@
+name: CI
+
+# FAST PR TIER (see docs/CI.md for the full architecture).
+#
+# Runs on every push and pull request to main. Optimized for a quick, reliable
+# signal: single OS, single Python (3.12), cached dependencies. Three parallel
+# jobs — code quality, unit/math tests, and a representative-notebook execution
+# (one notebook per module) — give broad coverage without re-running all ~100
+# notebooks on every push. The exhaustive full-suite run lives in the scheduled
+# nightly tier (nightly.yml).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A newer push to the same branch/PR cancels the in-progress run: no point
+# spending CI minutes validating a commit that's already been superseded.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Single source of truth for the fast tier's Python version. The supported
+  # range (3.11-3.13) is validated exhaustively in nightly.yml.
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. CODE QUALITY — lint + format + notebook structural validation.
+  #    Cheap and fast; does not execute any notebook.
+  # ---------------------------------------------------------------------------
+  code-quality:
+    name: Code quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      # --- BLOCKING: Python tooling sources (tools/) must be clean. ---
+      - name: Ruff (lint tools/ Python sources)
+        run: ruff check tools/
+
+      - name: Black (format check, tools/ Python sources)
+        run: black --check tools/
+
+      # --- BLOCKING: every notebook must be structurally valid JSON/nbformat. ---
+      - name: Validate notebook structure (nbformat)
+        run: python tools/ci/validate_notebooks.py
+
+      # --- ADVISORY: notebook code style. Reported, but does not fail the build:
+      # these are authored teaching notebooks where enforced auto-formatting can
+      # fight intentional pedagogical layout (aligned matrices, step-by-step
+      # spacing). Surfaced so a contributor CAN see and fix drift, without
+      # blocking unrelated PRs. (Matches the pre-consolidation notebook_lint.yml,
+      # which ran these with `|| true`.)
+      - name: Ruff (notebooks, advisory)
+        continue-on-error: true
+        run: nbqa ruff . --extend-ignore=E402,F401
+
+      - name: Black (notebooks, advisory)
+        continue-on-error: true
+        run: nbqa black --check .
+
+  # ---------------------------------------------------------------------------
+  # 2. UNIT / MATH TESTS — the notebook_audit harness's own test suite plus
+  #    any repository unit tests. Fast: executes only tiny fixture notebooks,
+  #    not curriculum content.
+  # ---------------------------------------------------------------------------
+  unit-tests:
+    name: Unit & math tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            tools/notebook_audit/requirements-audit.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+          pip install -r tools/notebook_audit/requirements-audit.txt
+
+      - name: Register Jupyter kernel (fixtures execute against it)
+        run: python -m ipykernel install --user --name python3 --display-name "Python 3"
+
+      - name: Run the audit harness test suite
+        env:
+          PYTHONPATH: tools
+          # Point the fixture-executing tests at the kernel we just registered.
+          NOTEBOOK_AUDIT_TEST_KERNEL: python3
+        run: |
+          pytest tools/notebook_audit/tests/ \
+            -v --timeout=300 \
+            --junitxml=reports/unit-tests-junit.xml
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-tests-junit
+          path: reports/unit-tests-junit.xml
+          if-no-files-found: warn
+
+  # ---------------------------------------------------------------------------
+  # 3. MATH REGRESSION — the mathematical identity/regression suite. Pure math
+  #    (no notebook execution, no kernel), so it runs in seconds and lives in
+  #    the fast tier. Verifies matrix/decomposition/eigen/SVD identities,
+  #    gradients/Jacobians/Hessians, probability & distribution identities,
+  #    optimization gradients, and numerical approximations by triangulating
+  #    analytical vs numerical vs trusted-library results. See
+  #    docs/MATH_REGRESSION.md.
+  # ---------------------------------------------------------------------------
+  math-regression:
+    name: Math regression suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Curriculum deps supply the trusted oracles (numpy, scipy, torch);
+          # dev deps supply pytest. No notebook tooling or kernel needed.
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run the mathematical regression suite
+        env:
+          PYTHONPATH: tools
+        run: |
+          pytest tools/math_regression/tests/ \
+            -v --timeout=120 \
+            --junitxml=reports/math-regression-junit.xml
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: math-regression-junit
+          path: reports/math-regression-junit.xml
+          if-no-files-found: warn
+
+  # ---------------------------------------------------------------------------
+  # 4. REPRESENTATIVE NOTEBOOKS — execute ONE notebook per module in a fresh
+  #    kernel via the audit harness. Broad, cheap breakage detection: catches a
+  #    missing dependency or a module-wide API break on every PR. The full
+  #    ~100-notebook sweep runs nightly.
+  # ---------------------------------------------------------------------------
+  representative-notebooks:
+    name: Representative notebooks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            tools/notebook_audit/requirements-audit.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r tools/notebook_audit/requirements-audit.txt
+
+      - name: Register Jupyter kernel (notebooks declare "python3")
+        run: python -m ipykernel install --user --name python3 --display-name "Python 3"
+
+      - name: Execute one representative notebook per module
+        env:
+          PYTHONPATH: tools
+        run: |
+          python -m notebook_audit \
+            --representative \
+            --kernel-name python3 \
+            --notebook-timeout 600 \
+            --report-dir reports/notebook_audit_representative
+
+      - name: Append report to job summary
+        if: always()
+        run: |
+          if [ -f reports/notebook_audit_representative/report.md ]; then
+            cat reports/notebook_audit_representative/report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notebook-audit-representative
+          path: reports/notebook_audit_representative
+          if-no-files-found: warn

@@ -1,13 +1,40 @@
-numpy>=1.24.0
-scipy>=1.10.0
-sympy>=1.12
-matplotlib>=3.7.0
-seaborn>=0.12.0
-scikit-learn>=1.2.0
-torch>=2.0.0
-statsmodels>=0.14.0
-jupyter>=1.0.0
-jupyterlab>=4.0.0
-networkx>=3.1
-graphviz>=0.20.0
-tensorly>=0.8.0
+# Curriculum runtime dependencies for the 89 notebooks.
+#
+# This is the simple, beginner-friendly install path:
+#
+#     pip install -r requirements.txt
+#
+# Ranges are intentionally BOUNDED, not pinned: a lower bound that the
+# notebooks are known to run against, and an upper bound at the next major
+# release so a future breaking change (e.g. NumPy 3.0) can't silently break a
+# fresh install. For an EXACT, byte-for-byte reproducible environment, use the
+# pinned lock file instead:
+#
+#     pip install -r requirements-lock.txt
+#
+# Recommended Python: 3.12 (supported: 3.11-3.13). See README "Installation".
+
+# --- Core numerical / scientific stack ---
+numpy>=1.26,<3
+scipy>=1.11,<2
+sympy>=1.12,<2
+
+# --- Plotting ---
+matplotlib>=3.8,<4
+seaborn>=0.13,<0.15
+
+# --- Machine learning / stats ---
+scikit-learn>=1.4,<2
+statsmodels>=0.14,<1
+
+# --- Deep learning (CPU build by default; see README for GPU install) ---
+torch>=2.2,<3
+
+# --- Graphs and tensor methods ---
+networkx>=3.2,<4
+tensorly>=0.8,<0.10
+
+# --- Notebook environment ---
+jupyterlab>=4.0,<5
+notebook>=7.0,<8
+ipykernel>=6.29,<8

@@ -1,0 +1,195 @@
+name: Nightly Deep Validation
+
+# DEEP SCHEDULED TIER (see docs/CI.md for the full architecture).
+#
+# The exhaustive counterpart to ci.yml. Where the PR tier runs one notebook per
+# module on a single Python, this runs EVERY notebook, per module, across the
+# whole supported Python range (3.11-3.13), and can additionally verify
+# run-to-run determinism. It is deliberately heavy, so it runs on a schedule
+# (and on demand) rather than on every push.
+
+on:
+  schedule:
+    # 03:17 UTC daily. Off-peak, and an odd minute to avoid the top-of-hour
+    # thundering herd on GitHub's scheduler.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      check_determinism:
+        description: "Also run the double-execution determinism check (slower)"
+        required: false
+        default: false
+        type: boolean
+      python_versions:
+        description: "JSON list of Python versions to test"
+        required: false
+        default: '["3.11", "3.12", "3.13"]'
+        type: string
+
+concurrency:
+  group: nightly-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Resolve the Python-version matrix once so both a scheduled run (which can't
+  # supply inputs) and a manual dispatch (which can) share one definition.
+  setup:
+    name: Resolve matrix
+    runs-on: ubuntu-latest
+    outputs:
+      python-versions: ${{ steps.resolve.outputs.python-versions }}
+    steps:
+      - id: resolve
+        run: |
+          versions='${{ inputs.python_versions }}'
+          if [ -z "$versions" ]; then
+            versions='["3.11", "3.12", "3.13"]'
+          fi
+          echo "python-versions=$versions" >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # FULL AUDIT — every notebook in every module, on every supported Python.
+  # One job per (module, python) cell; fail-fast off so one module's failure
+  # doesn't cancel the rest and hide other regressions.
+  # ---------------------------------------------------------------------------
+  full-audit:
+    name: Audit ${{ matrix.module }} (py${{ matrix.python-version }})
+    needs: setup
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ${{ fromJSON(needs.setup.outputs.python-versions) }}
+        module:
+          - "00_Prerequisites"
+          - "01_Linear_Algebra"
+          - "02_Calculus"
+          - "03_Probability_and_Statistics"
+          - "04_Optimization"
+          - "05_Information_Theory"
+          - "06_Numerical_Methods"
+          - "07_Discrete_Mathematics"
+          - "08_Advanced_Linear_Algebra"
+          - "09_Advanced_Probability"
+          - "10_Differential_Geometry_and_Topology"
+          - "11_Functional_Analysis"
+          - "12_Capstone_Projects"
+          - "13_Statistical_Learning_Theory"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            tools/notebook_audit/requirements-audit.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r tools/notebook_audit/requirements-audit.txt
+
+      - name: Register Jupyter kernel (notebooks declare "python3")
+        run: python -m ipykernel install --user --name python3 --display-name "Python 3"
+
+      - name: Audit ${{ matrix.module }}
+        env:
+          PYTHONPATH: tools
+        run: |
+          python -m notebook_audit \
+            --module "${{ matrix.module }}" \
+            --kernel-name python3 \
+            --report-dir "reports/nightly/${{ matrix.python-version }}/${{ matrix.module }}"
+
+      - name: Append report to job summary
+        if: always()
+        run: |
+          report="reports/nightly/${{ matrix.python-version }}/${{ matrix.module }}/report.md"
+          if [ -f "$report" ]; then
+            {
+              echo "## ${{ matrix.module }} — Python ${{ matrix.python-version }}"
+              cat "$report"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          # Artifact names must be unique per matrix cell.
+          name: nightly-audit-${{ matrix.python-version }}-${{ matrix.module }}
+          path: reports/nightly/${{ matrix.python-version }}/${{ matrix.module }}
+          if-no-files-found: warn
+
+  # ---------------------------------------------------------------------------
+  # DETERMINISM — run every notebook TWICE and diff numeric stdout between the
+  # runs. Roughly doubles runtime, so it's opt-in (manual dispatch only) and
+  # runs on a single Python.
+  # ---------------------------------------------------------------------------
+  determinism:
+    name: Determinism ${{ matrix.module }}
+    if: github.event_name == 'workflow_dispatch' && inputs.check_determinism
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - "00_Prerequisites"
+          - "01_Linear_Algebra"
+          - "02_Calculus"
+          - "03_Probability_and_Statistics"
+          - "04_Optimization"
+          - "05_Information_Theory"
+          - "06_Numerical_Methods"
+          - "07_Discrete_Mathematics"
+          - "08_Advanced_Linear_Algebra"
+          - "09_Advanced_Probability"
+          - "10_Differential_Geometry_and_Topology"
+          - "11_Functional_Analysis"
+          - "12_Capstone_Projects"
+          - "13_Statistical_Learning_Theory"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            tools/notebook_audit/requirements-audit.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r tools/notebook_audit/requirements-audit.txt
+
+      - name: Register Jupyter kernel
+        run: python -m ipykernel install --user --name python3 --display-name "Python 3"
+
+      - name: Determinism check for ${{ matrix.module }}
+        env:
+          PYTHONPATH: tools
+        run: |
+          python -m notebook_audit \
+            --module "${{ matrix.module }}" \
+            --kernel-name python3 \
+            --check-determinism \
+            --report-dir "reports/nightly_determinism/${{ matrix.module }}"
+
+      - name: Upload determinism report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-determinism-${{ matrix.module }}
+          path: reports/nightly_determinism/${{ matrix.module }}
+          if-no-files-found: warn
