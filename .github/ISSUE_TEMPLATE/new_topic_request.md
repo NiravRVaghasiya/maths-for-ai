@@ -1,10 +1,17 @@
 ---
-name: New topic request
-about: Suggest a math topic or notebook that's missing from the curriculum
+name: 💡 New topic request (lightweight)
+about: Quickly suggest a math topic that's missing — no design work required
 title: "[Topic Request] "
-labels: topic-request
+labels: ["topic-request", "needs-triage"]
 assignees: ""
 ---
+
+<!--
+This is the LIGHTWEIGHT option: just say what's missing and why. If you've
+thought through placement, prerequisites, rigor, and the AI connection and want
+to make a full design proposal (or offer to write it), use the "Curriculum
+proposal" template instead.
+-->
 
 ## Topic
 

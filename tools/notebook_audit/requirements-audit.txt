@@ -1,0 +1,17 @@
+# Pinned dependencies for the notebook_audit CI tooling itself.
+#
+# Deliberately separate from the repo's own requirements.txt (which lists
+# the curriculum's OWN open-range dependencies, e.g. numpy>=1.24.0): this
+# file pins the exact versions this audit harness was built and verified
+# against, since the harness's own correctness (e.g. exactly how nbclient
+# reports a failing cell -- see executor.py's module docstring) depends on
+# specific library behavior that could change across versions.
+#
+# Install curriculum dependencies FIRST (`pip install -r requirements.txt`),
+# then this file. Both installs target the same virtual environment.
+nbformat==5.11.1
+nbclient==0.11.0
+ipykernel==7.3.0
+jupyter_client==8.10.0
+pyzmq==27.2.0
+pytest==9.0.2

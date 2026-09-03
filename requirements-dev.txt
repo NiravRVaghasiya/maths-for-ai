@@ -1,0 +1,22 @@
+# Development / CI tooling: code-quality checks and the test runner.
+#
+# This is NOT needed to run the notebooks (that's requirements.txt). It is the
+# toolchain the CI "code-quality" and "unit-tests" jobs install, and what a
+# contributor installs to reproduce those checks locally:
+#
+#     pip install -r requirements-dev.txt
+#
+# Pinned (like tools/notebook_audit/requirements-audit.txt) so a linter release
+# can't turn a green PR red without an intentional bump here.
+
+# --- Linting / formatting (notebooks are checked via nbqa) ---
+ruff==0.14.4
+black==25.11.0
+nbqa==1.9.1
+
+# --- Structural notebook validation ---
+nbformat==5.11.1
+
+# --- Test runner ---
+pytest==9.0.2
+pytest-timeout==2.4.0

@@ -1,21 +1,39 @@
+# Conda environment for the maths-for-ai curriculum (CPU build of PyTorch).
+#
+#     conda env create -f environment.yml
+#     conda activate maths-for-ai
+#
+# Version ranges mirror requirements.txt: bounded (a known-good floor plus an
+# upper cap at the next major) rather than pinned-to-latest. For an exact,
+# reproducible install use pip with requirements-lock.txt instead.
+#
+# Recommended Python: 3.12 (supported: 3.11-3.13).
 name: maths-for-ai
 channels:
-  - pytorch
   - conda-forge
-  - defaults
 dependencies:
-  - python=3.10
-  - numpy>=1.24
-  - scipy>=1.10
-  - sympy>=1.12
-  - matplotlib>=3.7
-  - seaborn>=0.12
-  - scikit-learn>=1.2
-  - pytorch>=2.0
-  - statsmodels>=0.14
-  - jupyterlab>=4.0
-  - networkx>=3.1
-  - graphviz>=0.20
+  - python>=3.11,<3.14
+  # --- Core numerical / scientific stack ---
+  - numpy>=1.26,<3
+  - scipy>=1.11,<2
+  - sympy>=1.12,<2
+  # --- Plotting ---
+  - matplotlib-base>=3.8,<4
+  - seaborn>=0.13,<0.15
+  # --- Machine learning / stats ---
+  - scikit-learn>=1.4,<2
+  - statsmodels>=0.14,<1
+  # --- Deep learning (CPU build from conda-forge; see README for GPU) ---
+  - pytorch>=2.2,<3
+  - cpuonly
+  # --- Graphs and tensor methods ---
+  - networkx>=3.2,<4
+  # --- Notebook environment ---
+  - jupyterlab>=4.0,<5
+  - notebook>=7.0,<8
+  - ipykernel>=6.29,<8
   - pip
   - pip:
-      - tensorly>=0.8.0
+      # tensorly's conda-forge package can lag; install from PyPI to match
+      # requirements.txt.
+      - tensorly>=0.8,<0.10
